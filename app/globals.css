@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 42 38% 97%;
+  --foreground: 214 30% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 214 30% 13%;
+  --muted: 215 18% 92%;
+  --muted-foreground: 215 10% 42%;
+  --accent: 165 38% 90%;
+  --accent-foreground: 165 70% 18%;
+  --primary: 154 61% 28%;
+  --primary-foreground: 150 40% 98%;
+  --border: 214 18% 84%;
+  --input: 214 18% 84%;
+  --ring: 154 61% 28%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-family: var(--font-geist-sans), Inter, system-ui, sans-serif;
+  background:
+    radial-gradient(circle at 8% 8%, rgba(65, 176, 138, 0.14), transparent 28%),
+    radial-gradient(circle at 95% 18%, rgba(231, 143, 83, 0.13), transparent 22%),
+    linear-gradient(135deg, #f8f5ed 0%, #eef6f2 47%, #f7f2ea 100%);
+}
+
+body::before {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  opacity: 0.36;
+  background-image:
+    linear-gradient(rgba(29, 45, 41, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(29, 45, 41, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom, black, transparent 76%);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  letter-spacing: 0;
+}
+
+::selection {
+  color: #0f281e;
+  background: #b9f4d7;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.scrollbar-soft {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(38, 92, 72, 0.3) transparent;
+}
+
+.scrollbar-soft::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.scrollbar-soft::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(38, 92, 72, 0.3);
+}

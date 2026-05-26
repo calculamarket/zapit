@@ -1,0 +1,186 @@
+{
+  "name": "Zap-it | Avisos de lembrete pelo WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zap-it/reminders/whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b48ee2e3-62db-445e-a743-6f85c75b21ef",
+      "name": "Receber lembrete do Zap-it",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -860,
+        120
+      ],
+      "webhookId": "zap-it-reminders-whatsapp"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json.body ?? $json;\nconst item = payload.item ?? payload;\nconst phone = String(payload.phone ?? payload.to ?? item.phone ?? '').replace(/\\D/g, '');\nconst title = String(item.title ?? 'Lembrete Zap-it').trim();\nconst content = String(item.content ?? '').trim();\nconst reminderAt = item.reminderAt ?? payload.reminderAt;\n\nif (!phone) {\n  throw new Error('Informe o telefone em formato internacional. Exemplo: 5511999999999');\n}\n\nif (!reminderAt) {\n  throw new Error('Informe reminderAt em ISO 8601. Exemplo: 2026-05-25T15:00:00-03:00');\n}\n\nconst dueAt = new Date(reminderAt);\n\nif (Number.isNaN(dueAt.getTime())) {\n  throw new Error('reminderAt inválido. Use uma data ISO 8601.');\n}\n\nconst priority = item.priority ? `Prioridade: ${item.priority}` : '';\nconst category = item.category ? `Categoria: ${item.category}` : '';\nconst cardUrl = payload.cardUrl || item.cardUrl || '';\nconst details = [content, priority, category, cardUrl ? `Abrir no Zap-it: ${cardUrl}` : ''].filter(Boolean).join('\\n');\nconst message = [`Lembrete Zap-it`, '', title, details].filter(Boolean).join('\\n');\n\nreturn [\n  {\n    json: {\n      itemId: item.id ?? payload.itemId ?? null,\n      title,\n      content,\n      phone,\n      reminderAt: dueAt.toISOString(),\n      message,\n      source: 'zap-it'\n    }\n  }\n];"
+      },
+      "id": "b5697447-7924-43a3-8991-37e6829a8682",
+      "name": "Validar e preparar lembrete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, status: 'scheduled', title: $json.title, scheduledFor: $json.reminderAt, to: $json.phone } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "e148d631-3053-41c9-8b1a-112d55ad42dd",
+      "name": "Responder agendamento",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -380,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $json.reminderAt }}"
+      },
+      "id": "c5c990c8-8e19-40d7-bbd7-27fd670f25d1",
+      "name": "Aguardar horário do lembrete",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -140,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.WHATSAPP_ACCESS_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $json.phone, type: 'text', text: { preview_url: false, body: $json.message } } }}",
+        "options": {}
+      },
+      "id": "e57438e8-3809-4358-96c0-4ccfc8d52981",
+      "name": "Enviar WhatsApp Cloud API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        120,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      ok: true,\n      itemId: $json.itemId ?? null,\n      title: $json.title,\n      deliveredAt: new Date().toISOString(),\n      whatsappResponse: $json\n    }\n  }\n];"
+      },
+      "id": "e071f614-67ad-45d5-9f09-02f92a15ea39",
+      "name": "Registrar resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        120
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receber lembrete do Zap-it": {
+      "main": [
+        [
+          {
+            "node": "Validar e preparar lembrete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar e preparar lembrete": {
+      "main": [
+        [
+          {
+            "node": "Responder agendamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder agendamento": {
+      "main": [
+        [
+          {
+            "node": "Aguardar horário do lembrete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar horário do lembrete": {
+      "main": [
+        [
+          {
+            "node": "Enviar WhatsApp Cloud API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar WhatsApp Cloud API": {
+      "main": [
+        [
+          {
+            "node": "Registrar resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8e7d3a51-9a80-497a-aef7-44bd28f5d265",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "zap-it-whatsapp-reminders",
+  "tags": [
+    {
+      "name": "Zap-it"
+    },
+    {
+      "name": "WhatsApp"
+    }
+  ]
+}
