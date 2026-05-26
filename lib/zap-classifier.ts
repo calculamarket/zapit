@@ -154,8 +154,8 @@ function inferCategory(type: ZapItemType, content: string): ZapCategory {
 }
 
 function buildTitle(content: string, type: ZapItemType, url?: string) {
-  const clean = content.replace(urlRegex, "").trim();
-  const source = clean || (url ? getDomain(url) : content);
+  const clean = (content || "").replace(urlRegex, "").trim();
+  const source = clean || (url ? getDomain(url) : (content || ""));
   const compact = source.length > 58 ? `${source.slice(0, 55).trim()}...` : source;
 
   if (type === "tarefa") {
