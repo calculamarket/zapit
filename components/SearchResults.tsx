@@ -26,8 +26,8 @@ export function SearchResults() {
             Busca global
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            {results.length} resultado{results.length === 1 ? "" : "s"} para "{query}" em cards ativos e
-            históricos.
+            {results.length} resultado{results.length === 1 ? "" : "s"} para &quot;{query}&quot;
+            em cards ativos e históricos.
           </p>
         </div>
         <Button variant="secondary" onClick={() => setGlobalSearch("")}>

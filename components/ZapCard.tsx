@@ -115,7 +115,7 @@ export function ZapCard({ item, compact = false, readOnly = false }: ZapCardProp
       } else {
         alert(res.error || "Erro ao enviar resposta.");
       }
-    } catch (error) {
+    } catch {
       alert("Erro ao enviar resposta.");
     } finally {
       setIsSendingReply(false);

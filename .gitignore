@@ -4,7 +4,10 @@ node_modules
 out
 dist
 *.log
+*.db
 .env*
 !.env.example
 
 /lib/generated/prisma
+public/sw.js
+public/workbox-*.js

@@ -10,6 +10,8 @@ import {
   MessageCircle,
   Settings,
   Zap,
+  User as UserIcon,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { zapViews } from "@/lib/zap-options";
@@ -27,11 +29,11 @@ const icons: Record<ZapView, typeof LayoutDashboard> = {
 };
 
 export function Sidebar() {
-  const { activeView, setActiveView, items } = useZapStore();
+  const { activeView, setActiveView, items, users, currentUser, setCurrentUser } = useZapStore();
   const inboxCount = items.filter((item) => item.status === "entrada").length;
 
   return (
-    <aside className="border-b border-white/70 bg-white/60 px-4 py-4 backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-5">
+    <aside className="border-b border-white/70 bg-white/60 px-4 py-4 backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-5 flex flex-col">
       <div className="flex items-center justify-between gap-3 lg:block">
         <button
           className="flex items-center gap-3 rounded-lg text-left"
@@ -94,6 +96,40 @@ export function Sidebar() {
           quando você resolve.
         </p>
       </div>
+
+      {users.length > 0 && (
+        <div className="mt-auto pt-5 border-t border-slate-200">
+          <div className="flex items-center gap-2 mb-3 px-1">
+            <Users className="h-4 w-4 text-slate-500" />
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Usuário do Painel</span>
+          </div>
+          <div className="space-y-1">
+            {users.map((user) => (
+              <button
+                key={user.id}
+                onClick={() => setCurrentUser(user)}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-bold transition",
+                  currentUser?.id === user.id
+                    ? "bg-emerald-50 text-emerald-900 border border-emerald-100"
+                    : "text-slate-600 hover:bg-white/90 hover:text-slate-950",
+                )}
+              >
+                <div className={cn(
+                  "h-6 w-6 rounded-full flex items-center justify-center text-[10px]",
+                  currentUser?.id === user.id ? "bg-emerald-200" : "bg-slate-200"
+                )}>
+                  <UserIcon className="h-3 w-3" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate">{user.name}</div>
+                  <div className="text-[10px] font-medium opacity-60 truncate">{user.whatsappNumber}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

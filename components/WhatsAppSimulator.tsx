@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Check, ImagePlus, MessageCircle, Send, Tags } from "lucide-react";
+import { Check, ImagePlus, Loader2, MessageCircle, Send, Tags } from "lucide-react";
+import { scheduleZapReminder } from "@/app/actions/zap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -13,7 +14,7 @@ import type { ZapCategory, ZapPriority } from "@/types/zap";
 type CategoryChoice = ZapCategory | "auto";
 
 export function WhatsAppSimulator() {
-  const { addFromWhatsApp, setActiveView } = useZapStore();
+  const { addFromWhatsApp, setActiveView, currentUser } = useZapStore();
   const [text, setText] = useState("");
   const [link, setLink] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
@@ -22,8 +23,9 @@ export function WhatsAppSimulator() {
   const [reminderAt, setReminderAt] = useState("");
   const [tags, setTags] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!text.trim() && !link.trim()) {
@@ -31,28 +33,45 @@ export function WhatsAppSimulator() {
       return;
     }
 
-    const item = addFromWhatsApp({
-      text,
-      link,
-      previewUrl,
-      category: category === "auto" ? undefined : category,
-      priority,
-      reminderAt,
-      tags: tags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-    });
+    setIsSubmitting(true);
 
-    setText("");
-    setLink("");
-    setPreviewUrl("");
-    setCategory("auto");
-    setPriority("media");
-    setReminderAt("");
-    setTags("");
-    setActiveView("dashboard");
-    setFeedback(`"${item.title}" virou card no mural.`);
+    try {
+      const item = await addFromWhatsApp({
+        text,
+        link,
+        previewUrl,
+        remoteJid: currentUser ? `${currentUser.whatsappNumber}@s.whatsapp.net` : undefined,
+        category: category === "auto" ? undefined : category,
+        priority,
+        reminderAt,
+        tags: tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      });
+
+      let reminderFeedback = "";
+      if (item.reminderAt) {
+        const reminder = await scheduleZapReminder(item.id);
+        reminderFeedback = reminder.success
+          ? " Lembrete conectado ao WhatsApp."
+          : ` ${reminder.error}`;
+      }
+
+      setText("");
+      setLink("");
+      setPreviewUrl("");
+      setCategory("auto");
+      setPriority("media");
+      setReminderAt("");
+      setTags("");
+      setActiveView("dashboard");
+      setFeedback(`"${item.title}" virou card no mural.${reminderFeedback}`);
+    } catch {
+      setFeedback("Não consegui criar esse card agora. Tente de novo em instantes.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -152,9 +171,9 @@ export function WhatsAppSimulator() {
           />
         </label>
 
-        <Button type="submit" className="w-full">
-          <Send className="h-4 w-4" />
-          Enviar para o Zap-it
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          {isSubmitting ? "Enviando..." : "Enviar para o Zap-it"}
         </Button>
       </form>
 

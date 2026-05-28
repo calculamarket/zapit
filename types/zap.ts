@@ -68,6 +68,15 @@ export type ZapItem = {
   url?: string;
   previewUrl?: string;
   preview?: ZapPreview;
+  userId?: string;
+};
+
+export type User = {
+  id: string;
+  name: string;
+  whatsappNumber: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ZapView =

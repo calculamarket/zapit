@@ -1,103 +1,129 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
-import { ZapItem, ZapItemType, ZapStatus, ZapPriority, ZapCategory, ZapOrigin } from "@/types/zap";
 import { revalidatePath } from "next/cache";
+import {
+  deleteZapFromSupabase,
+  getUsersFromSupabase,
+  getZapWithUserFromSupabase,
+  getZapsFromSupabase,
+  updateZapStatusInSupabase,
+  upsertZapInSupabase,
+} from "@/lib/supabase-data";
+import type { ZapItem, ZapStatus } from "@/types/zap";
 
-function serializeItem(item: any): ZapItem {
-  return {
-    ...item,
-    tags: JSON.parse(item.tags || "[]"),
-    preview: item.preview ? JSON.parse(item.preview) : undefined,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString(),
-    reminderAt: item.reminderAt?.toISOString(),
-    archivedAt: item.archivedAt?.toISOString(),
-    completedAt: item.completedAt?.toISOString(),
-  };
+const DEFAULT_REMINDERS_WEBHOOK_URL =
+  "https://n8n-n8n.simduh.easypanel.host/webhook/zap-it/reminders/whatsapp";
+
+export async function getZaps(userId?: string) {
+  return getZapsFromSupabase(userId);
 }
 
-export async function getZaps() {
-  const items = await prisma.zapItem.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-  return items.map(serializeItem);
+export async function getUsers() {
+  return getUsersFromSupabase();
 }
 
 export async function upsertZap(item: Partial<ZapItem> & { id: string }) {
-  const data = {
-    title: item.title,
-    content: item.content,
-    type: item.type,
-    category: item.category,
-    priority: item.priority,
-    status: item.status,
-    tags: JSON.stringify(item.tags || []),
-    origin: item.origin,
-    remoteJid: item.remoteJid,
-    important: item.important,
-    reminderAt: item.reminderAt ? new Date(item.reminderAt) : null,
-    archivedAt: item.archivedAt ? new Date(item.archivedAt) : null,
-    completedAt: item.completedAt ? new Date(item.completedAt) : null,
-    summary: item.summary,
-    url: item.url,
-    previewUrl: item.previewUrl,
-    preview: item.preview ? JSON.stringify(item.preview) : null,
-  };
-
-  const updated = await prisma.zapItem.upsert({
-    where: { id: item.id },
-    update: data,
-    create: {
-      id: item.id,
-      ...data,
-      title: item.title || "Sem título",
-      content: item.content || "",
-      type: item.type || "nota",
-      category: item.category || "sem-categoria",
-      priority: item.priority || "media",
-      status: item.status || "entrada",
-      origin: item.origin || "Manual",
-    },
-  });
-
+  const saved = await upsertZapInSupabase(item);
   revalidatePath("/");
-  return serializeItem(updated);
+  return saved;
+}
+
+function getReminderPhone(payload: Awaited<ReturnType<typeof getZapWithUserFromSupabase>>) {
+  if (!payload) return null;
+
+  const userPhone = payload.user?.whatsappNumber?.replace(/\D/g, "");
+  if (userPhone) return userPhone;
+
+  const remotePhone = payload.item.remoteJid?.split("@")[0]?.replace(/\D/g, "");
+  return remotePhone || null;
+}
+
+export async function scheduleZapReminder(id: string) {
+  const payload = await getZapWithUserFromSupabase(id);
+
+  if (!payload) {
+    return { success: false, error: "Card não encontrado." };
+  }
+
+  if (!payload.item.reminderAt) {
+    return { success: true, skipped: true, message: "Card sem data de lembrete." };
+  }
+
+  const phone = getReminderPhone(payload);
+  if (!phone) {
+    return { success: false, error: "Defina um telefone para receber o lembrete." };
+  }
+
+  const webhookUrl = process.env.ZAPIT_REMINDERS_WEBHOOK_URL || DEFAULT_REMINDERS_WEBHOOK_URL;
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone,
+        item: {
+          id: payload.item.id,
+          title: payload.item.title,
+          content: payload.item.content,
+          type: payload.item.type,
+          category: payload.item.category,
+          priority: payload.item.priority,
+          reminderAt: payload.item.reminderAt,
+          tags: payload.item.tags,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: "O card foi salvo, mas o n8n não confirmou o lembrete.",
+      };
+    }
+
+    return { success: true, message: "Lembrete enviado para o n8n." };
+  } catch (error) {
+    console.error("Failed to schedule reminder in n8n:", error);
+    return {
+      success: false,
+      error: "O card foi salvo, mas não foi possível chamar o n8n.",
+    };
+  }
 }
 
 export async function sendWhatsAppReply(id: string, text: string) {
-  const item = await prisma.zapItem.findUnique({ where: { id } });
-  if (!item || !item.remoteJid) {
+  const payload = await getZapWithUserFromSupabase(id);
+  const remoteJid = payload?.item.remoteJid;
+
+  if (!payload || !remoteJid) {
     throw new Error("Não é possível responder: identificador do WhatsApp não encontrado.");
   }
 
   const apiUrl = process.env.EVOLUTION_API_URL;
   const apiKey = process.env.EVOLUTION_API_KEY;
-  const instance = process.env.EVOLUTION_INSTANCE_NAME;
+  const instance = process.env.EVOLUTION_INSTANCE_NAME || process.env.EVOLUTION_INSTANCE;
 
   if (!apiUrl || !apiKey || !instance) {
-    console.warn("Evolution API configuration missing in .env");
     return { success: false, error: "Configuração da Evolution API ausente." };
   }
 
   try {
-    const res = await fetch(`${apiUrl}/message/sendText/${instance}`, {
+    const res = await fetch(`${apiUrl.replace(/\/$/, "")}/message/sendText/${instance}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: apiKey,
       },
       body: JSON.stringify({
-        number: item.remoteJid,
-        text: text,
+        number: remoteJid.split("@")[0],
+        text,
         delay: 1200,
         linkPreview: true,
       }),
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      console.error("Evolution API error:", err);
       return { success: false, error: "Erro ao enviar mensagem via Evolution API." };
     }
 
@@ -109,20 +135,12 @@ export async function sendWhatsAppReply(id: string, text: string) {
 }
 
 export async function deleteZap(id: string) {
-  await prisma.zapItem.delete({ where: { id } });
+  await deleteZapFromSupabase(id);
   revalidatePath("/");
 }
 
 export async function updateZapStatus(id: string, status: ZapStatus, archivedAt?: string, completedAt?: string) {
-  const now = new Date();
-  const updated = await prisma.zapItem.update({
-    where: { id },
-    data: {
-      status,
-      archivedAt: archivedAt ? new Date(archivedAt) : (status === "lido" || status === "arquivado" || status === "concluido" ? now : null),
-      completedAt: completedAt ? new Date(completedAt) : (status === "concluido" ? now : null),
-    },
-  });
+  const updated = await updateZapStatusInSupabase(id, status, archivedAt, completedAt);
   revalidatePath("/");
-  return serializeItem(updated);
+  return updated;
 }

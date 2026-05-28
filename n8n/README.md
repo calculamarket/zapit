@@ -1,4 +1,4 @@
-# Workflow n8n: lembretes Zap-it pelo WhatsApp
+# Workflow n8n: lembretes Zap-it pela Evolution API
 
 Arquivo para importar no n8n:
 
@@ -10,18 +10,20 @@ n8n/zap-it-whatsapp-reminders.workflow.json
 
 1. Recebe um lembrete do Zap-it por webhook.
 2. Valida telefone e data do lembrete.
-3. Responde imediatamente com `202 scheduled`.
+3. Confirma o recebimento do webhook.
 4. Aguarda o horário definido em `reminderAt`.
-5. Envia a mensagem pelo WhatsApp Cloud API.
+5. Envia a mensagem pela Evolution API na sua VPS.
 
-## Variáveis necessárias no n8n
+## Configuração necessária no n8n
 
-Configure no ambiente do n8n:
+No workflow ativo, a Evolution API está configurada com:
 
-```bash
-WHATSAPP_PHONE_NUMBER_ID=seu_phone_number_id
-WHATSAPP_ACCESS_TOKEN=seu_token_da_meta
-```
+- URL da sua VPS no node `Enviar WhatsApp Evolution API`.
+- Instância da Evolution no caminho `/message/sendText/{instance}`.
+- Credencial `HTTP Header Auth` com o header `apikey`.
+
+Para importar este JSON em outro n8n, crie uma credencial `HTTP Header Auth`, use `apikey`
+como nome do header e selecione essa credencial no node de envio.
 
 ## Payload esperado
 
@@ -45,5 +47,21 @@ Envie um `POST` para o webhook do workflow:
 ## Observações
 
 - Use telefone em formato internacional, sem `+`.
-- O workflow usa mensagem de texto livre. Para contas WhatsApp que exigem template fora da janela de 24h, troque o corpo do node `Enviar WhatsApp Cloud API` para `type: "template"`.
-- Como o Zap-it ainda é local e sem backend real, este workflow fica pronto para ser conectado por webhook quando a integração sair do LocalStorage.
+- O workflow foi montado para Evolution API v2, usando `POST /message/sendText/{instance}` com header `apikey`.
+- Se sua VPS estiver em Evolution API v1, altere o corpo do node `Enviar WhatsApp Evolution API` para:
+
+```json
+{
+  "number": "={{$json.phone}}",
+  "textMessage": {
+    "text": "={{$json.message}}"
+  },
+  "options": {
+    "delay": 1200,
+    "presence": "composing",
+    "linkPreview": false
+  }
+}
+```
+
+- O Zap-it chama esse webhook automaticamente quando um card é criado com data de lembrete.

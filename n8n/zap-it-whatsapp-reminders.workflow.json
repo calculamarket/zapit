@@ -1,17 +1,32 @@
 {
-  "name": "Zap-it | Avisos de lembrete pelo WhatsApp",
+  "name": "Zap-it | Avisos de lembrete via Evolution API",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "zap-it/reminders/whatsapp",
-        "responseMode": "responseNode",
-        "options": {}
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": {
+            "values": {
+              "responseCode": 202
+            }
+          },
+          "responseData": "{\"ok\":true,\"status\":\"received\",\"message\":\"Lembrete recebido pelo Zap-it.\"}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       },
       "id": "b48ee2e3-62db-445e-a743-6f85c75b21ef",
       "name": "Receber lembrete do Zap-it",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [
         -860,
         120
@@ -33,23 +48,6 @@
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { ok: true, status: 'scheduled', title: $json.title, scheduledFor: $json.reminderAt, to: $json.phone } }}",
-        "options": {
-          "responseCode": 202
-        }
-      },
-      "id": "e148d631-3053-41c9-8b1a-112d55ad42dd",
-      "name": "Responder agendamento",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        -380,
-        120
-      ]
-    },
-    {
-      "parameters": {
         "resume": "specificTime",
         "dateTime": "={{ $json.reminderAt }}"
       },
@@ -65,14 +63,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v20.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "url": "https://n8n-evolution-api.simduh.easypanel.host/message/sendText/PROJETO",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{$env.WHATSAPP_ACCESS_TOKEN}}"
-            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -82,17 +78,27 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $json.phone, type: 'text', text: { preview_url: false, body: $json.message } } }}",
+        "jsonBody": "={{ { number: $json.phone, text: $json.message, delay: 1200, linkPreview: false } }}",
         "options": {}
       },
       "id": "e57438e8-3809-4358-96c0-4ccfc8d52981",
-      "name": "Enviar WhatsApp Cloud API",
+      "name": "Enviar WhatsApp Evolution API",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "typeVersion": 4.4,
       "position": [
         120,
         120
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "BNmJVOuBbGXASe3H",
+          "name": "Evolution API PROJETO - Zap-it"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -125,17 +131,6 @@
       "main": [
         [
           {
-            "node": "Responder agendamento",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Responder agendamento": {
-      "main": [
-        [
-          {
             "node": "Aguardar horário do lembrete",
             "type": "main",
             "index": 0
@@ -147,14 +142,14 @@
       "main": [
         [
           {
-            "node": "Enviar WhatsApp Cloud API",
+            "node": "Enviar WhatsApp Evolution API",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enviar WhatsApp Cloud API": {
+    "Enviar WhatsApp Evolution API": {
       "main": [
         [
           {
@@ -170,7 +165,6 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "8e7d3a51-9a80-497a-aef7-44bd28f5d265",
   "meta": {
     "templateCredsSetupCompleted": false
   },
@@ -180,7 +174,7 @@
       "name": "Zap-it"
     },
     {
-      "name": "WhatsApp"
+      "name": "Evolution API"
     }
   ]
 }

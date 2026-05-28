@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createZapCard } from "@/lib/zap-classifier";
-import { prisma } from "@/lib/prisma";
+import {
+  getAppConfigFromSupabase,
+  getUserByWhatsappFromSupabase,
+  upsertZapInSupabase,
+} from "@/lib/supabase-data";
 import { categorizeWithAI } from "@/lib/zap-ai";
 import type { WhatsAppMessageInput } from "@/types/zap";
 
@@ -115,9 +119,37 @@ export async function POST(req: NextRequest) {
   const data = body.data;
   if (!data) return NextResponse.json({ error: "No data" }, { status: 400 });
 
-  // Only capture messages the user sent to themselves
-  if (!data.key.fromMe) {
-    return NextResponse.json({ ok: true, skipped: "not fromMe" });
+  const remoteJid = data.key.remoteJid;
+  const isFromMe = data.key.fromMe;
+  
+  // Extract phone number from JID (e.g., "5511999999999@s.whatsapp.net" -> "5511999999999")
+  const remoteNumber = remoteJid.split("@")[0];
+
+  // Fetch central number to distinguish self-messages
+  const centralNumber = await getAppConfigFromSupabase("central_number");
+
+  let targetUserNumber: string | null = null;
+
+  if (isFromMe) {
+    // If it's from me, only process if it's sent to myself (central number)
+    if (remoteNumber === centralNumber) {
+      targetUserNumber = remoteNumber;
+    } else {
+      return NextResponse.json({ ok: true, skipped: "outgoing message to others" });
+    }
+  } else {
+    // Incoming message: the remoteNumber is the sender
+    targetUserNumber = remoteNumber;
+  }
+
+  if (!targetUserNumber) {
+    return NextResponse.json({ ok: true, skipped: "no target user" });
+  }
+
+  const user = await getUserByWhatsappFromSupabase(targetUserNumber);
+
+  if (!user) {
+    return NextResponse.json({ ok: true, skipped: "not a registered user" });
   }
 
   const input = toInput(data);
@@ -138,28 +170,7 @@ export async function POST(req: NextRequest) {
     card.important = aiResult.priority === "alta" || aiResult.priority === "urgente";
   }
 
-  await prisma.zapItem.create({
-    data: {
-      id: card.id,
-      title: card.title,
-      content: card.content,
-      type: card.type,
-      category: card.category,
-      priority: card.priority,
-      status: card.status,
-      tags: JSON.stringify(card.tags),
-      origin: card.origin,
-      remoteJid: card.remoteJid,
-      important: card.important,
-      createdAt: new Date(card.createdAt),
-      updatedAt: new Date(card.updatedAt),
-      reminderAt: card.reminderAt ? new Date(card.reminderAt) : null,
-      summary: card.summary,
-      url: card.url,
-      previewUrl: card.previewUrl,
-      preview: card.preview ? JSON.stringify(card.preview) : null,
-    },
-  });
+  await upsertZapInSupabase({ ...card, userId: user.id });
 
-  return NextResponse.json({ ok: true, cardId: card.id });
+  return NextResponse.json({ ok: true, cardId: card.id, userId: user.id });
 }

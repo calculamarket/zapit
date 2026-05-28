@@ -9,18 +9,21 @@ import {
   useMemo,
   useState,
 } from "react";
-import { getZaps, upsertZap, deleteZap, updateZapStatus } from "@/app/actions/zap";
+import { getZaps, upsertZap, deleteZap, updateZapStatus, getUsers } from "@/app/actions/zap";
 import { archiveZapItem, receiveWhatsAppMessage } from "@/lib/zap-classifier";
 import { useEvolutionPolling } from "@/lib/hooks/use-evolution-polling";
-import type { WhatsAppMessageInput, ZapItem, ZapView } from "@/types/zap";
+import type { WhatsAppMessageInput, ZapItem, ZapView, User } from "@/types/zap";
 
 type ZapContextValue = {
   items: ZapItem[];
+  users: User[];
+  currentUser: User | null;
   isHydrated: boolean;
   activeView: ZapView;
   globalSearch: string;
   setActiveView: (view: ZapView) => void;
   setGlobalSearch: (query: string) => void;
+  setCurrentUser: (user: User | null) => void;
   addFromWhatsApp: (input: WhatsAppMessageInput) => Promise<ZapItem>;
   addItems: (cards: ZapItem[]) => void;
   updateItem: (id: string, patch: Partial<ZapItem>) => Promise<void>;
@@ -40,20 +43,31 @@ const ZapContext = createContext<ZapContextValue | null>(null);
 
 export function ZapProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ZapItem[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [activeView, setActiveView] = useState<ZapView>("dashboard");
   const [globalSearch, setGlobalSearch] = useState("");
 
   const refreshItems = useCallback(async () => {
     try {
-      const data = await getZaps();
+      const usersData = await getUsers();
+      setUsers(usersData);
+      
+      // Default to first user if not set
+      const initialUser = currentUser || usersData[0] || null;
+      if (!currentUser && initialUser) {
+        setCurrentUser(initialUser);
+      }
+
+      const data = await getZaps(initialUser?.id);
       setItems(data);
       setIsHydrated(true);
     } catch (error) {
       console.error("Failed to fetch zaps:", error);
       setIsHydrated(true);
     }
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     refreshItems();
@@ -61,18 +75,23 @@ export function ZapProvider({ children }: { children: ReactNode }) {
 
   const addFromWhatsApp = useCallback(async (input: WhatsAppMessageInput) => {
     const newItem = receiveWhatsAppMessage(input);
+    if (currentUser) {
+      newItem.userId = currentUser.id;
+    }
     const saved = await upsertZap(newItem);
     setItems((current) => [saved, ...current]);
     return saved;
-  }, []);
+  }, [currentUser]);
 
   const addItems = useCallback((cards: ZapItem[]) => {
     setItems((current) => {
       const existingIds = new Set(current.map((i) => i.id));
-      const newItems = cards.filter((c) => !existingIds.has(c.id));
+      // Filter items for current user if polling returns all
+      const userItems = currentUser ? cards.filter(c => c.userId === currentUser.id) : cards;
+      const newItems = userItems.filter((c) => !existingIds.has(c.id));
       return [...newItems, ...current];
     });
-  }, []);
+  }, [currentUser]);
 
   useEvolutionPolling(addItems);
 
@@ -229,11 +248,14 @@ export function ZapProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       items,
+      users,
+      currentUser,
       isHydrated,
       activeView,
       globalSearch,
       setActiveView,
       setGlobalSearch,
+      setCurrentUser,
       addFromWhatsApp,
       addItems,
       updateItem,
@@ -250,6 +272,8 @@ export function ZapProvider({ children }: { children: ReactNode }) {
     }),
     [
       items,
+      users,
+      currentUser,
       isHydrated,
       activeView,
       globalSearch,
